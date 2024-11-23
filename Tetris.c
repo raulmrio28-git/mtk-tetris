@@ -11,6 +11,7 @@
 **
 ** when          who             what, where, why
 ** ----------    ------------    --------------------------------
+** 2024-11-23    me              Properly randomize pieces.
 ** 2024-11-22    me              Created.
 **
 ** ===========================================================================
@@ -538,14 +539,7 @@ static void launchOneTetris( void)
 
 static uint8 generateRandomTetrisModel( void)
 {
-    uint8   model = 0;
-    uint32  sum  = 0;
-
-    kal_get_time(&sum);
-    sum += (rand()%255);
-    model = sum % MAX_BLOCK_KIND;
-
-    return model;
+    return rand() % MAX_BLOCK_KIND;
 }
 
 static void calculateAbsoluteCoordinates(  CTetris* tetris,
@@ -1148,7 +1142,7 @@ static void drawGridLines( void)
     for(i = 1; i < me->gridColumnNumber; i ++)
     {
         x += me->gridSideLength;
-		gui_fill_rectangle(x,y,x+1,ey,gui_color(0,0,0x8b));
+		gui_fill_rectangle(x-1,y,x,ey,gui_color(0,0,0x8b));
     }
 } // drawGridLines
 
