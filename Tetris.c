@@ -75,7 +75,7 @@
 #ifndef __MTK_TARGET__
 #define debug(format, ...) printf((format), ##__VA_ARGS__)
 #else
-#define debug(...) kal_prompt_trace(MOD_MMI, __VA_ARGS__)
+#define debug(...) kal_prompt_trace(MOD_MMI_MEDIA_APP, __VA_ARGS__)
 #endif
 
 #ifdef __MMI_GAME_MULTICHANNEL_SOUND__
@@ -1480,11 +1480,22 @@ static boolean playMusic( MusicTypeEnum type)
 {
 	U8* buffer;
 	U32 size;
-	debug("sound=====%d",me->soundOn);
-    if( me->soundOn == FALSE)
-    {
-        return FALSE;
-    }
+	debug("sound=====%d",g_gx_tetris_context.soundOn);
+	if( type == MUSIC_TITLE)
+	{
+		S16 error;
+	#ifdef __MMI_GAME_MULTICHANNEL_SOUND__
+		ReadValue(NVRAM_GFX_SOUND_EFFECT_SETTING, &g_gx_tetris_context.soundOn, DS_BYTE, &error);
+	#else /* __MMI_GAME_MULTICHANNEL_SOUND__ */ 
+		ReadValue(NVRAM_GFX_AUDIO_SETTING, &g_gx_tetris_context.soundOn, DS_BYTE, &error);
+	#endif
+		if (error != NVRAM_READ_SUCCESS)
+			return FALSE;
+	}
+	if( g_gx_tetris_context.soundOn == FALSE)
+	{
+		return FALSE;
+	}
 
     switch(type)
     {
@@ -2006,6 +2017,8 @@ static void displayGameScoreScreen( uint16 resourceId, uint32 theScore, boolean 
     }
 	mmi_wcscpy(drawee_string, scoreString);
     entry_full_screen();
+	g_gx_tetris_context.is_gameover = TRUE;
+    g_gx_tetris_context.is_new_game = TRUE;
 	entry_ret = mmi_frm_scrn_enter (GFX.cur_gid, GFX_GAMEOVER_SCREEN, displayScreenStop, displayGameScoreScreen, MMI_FRM_UNKNOW_SCRN);
 	if (!entry_ret)
 	{
@@ -2041,8 +2054,6 @@ static void displayGameScoreScreen( uint16 resourceId, uint32 theScore, boolean 
     /*SetKeyHandler(mmi_frm_scrn_close_active_id, KEY_LEFT_ARROW, KEY_EVENT_DOWN);*/
 
     /* gameover will go back to first menuitem */
-    g_gx_tetris_context.is_gameover = TRUE;
-    g_gx_tetris_context.is_new_game = TRUE;
 
     SetRightSoftkeyFunction(mmi_frm_scrn_close_active_id, KEY_EVENT_UP);
 	tetris_ingame = FALSE; //back to the original value
@@ -2129,63 +2140,6 @@ static void saveSettingData( void)
 	WriteValue(NVRAM_GX_TETRIS_SCORE_HARD, &g_gx_tetris_context.configData.topScore[2], DS_SHORT, &error);
 	if (error != NVRAM_WRITE_SUCCESS)
 		return;
-}
-
-void mmi_gx_tetris_draw_gamescore(WCHAR* str)
-{
-    /*----------------------------------------------------------------*/
-    /* Local Variables                                                */
-    /*----------------------------------------------------------------*/
-    U8 buffer[64] = {0};
-    U8 buffer_UCS2[64] = {0};
-    S32 text_image_width = 0;
-    S32 text_image_height = 0;
-    S32 box_image_width = 0;
-    S32 box_image_height = 0;
-    S32 pic_image_width = 0;
-    S32 pic_image_height = 0;
-    S32 text_image_offset_y = 0;
-    S32 box_image_offset_y = 0;
-    S32 pic_image_offset_y = 0;
-    S32 score_str_offset_y = 0;
-    S32 score_str_offset_x = 0;
-    S32 str_width = 0;
-    S32 str_height = 0;
-    S32 spacing = 0;
-
-    /*----------------------------------------------------------------*/
-    /* Code Body                                                      */
-    /*----------------------------------------------------------------*/
-    clear_screen();
-    gui_reset_clip();
-    gui_reset_text_clip();
-    gui_set_font(&MMI_medium_font);
-
-    spacing = (UI_device_height - MMI_button_bar_height - (text_image_height + box_image_height + pic_image_height)) >> 2;
-
-    text_image_offset_y = spacing;
-    box_image_offset_y = text_image_offset_y + text_image_height + spacing;
-    pic_image_offset_y = box_image_offset_y + box_image_height + spacing;
-
-    gui_measure_string((UI_string_type) str, &str_width, &str_height);
-
-    score_str_offset_x = (UI_device_width - str_width) >> 1;
-    score_str_offset_y = box_image_offset_y + ((box_image_height - str_height) >> 1);
-
-    gui_set_text_color(gui_color(0, 0, 0));
-
-    if (r2lMMIFlag)
-    {
-        gui_move_text_cursor(score_str_offset_x + str_width, score_str_offset_y);
-    }
-    else
-    {
-        gui_move_text_cursor(score_str_offset_x, score_str_offset_y);
-    }
-
-    gui_print_text((UI_string_type) str);
-    gui_BLT_double_buffer(0, 0, UI_device_width - 1, UI_device_height - 1);
-
 }
 
 /*
@@ -2365,7 +2319,7 @@ void mmi_gx_tetris_exit_game(void)
     /*----------------------------------------------------------------*/
     /* Code Body                                                      */
     /*----------------------------------------------------------------*/
-	if (tetris_ingame == FALSE)
+	if (g_gx_tetris_context.is_new_game == TRUE)
 		freeGameDataMemory();
 	killTimer();
 }
