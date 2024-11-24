@@ -11,6 +11,7 @@
 **
 ** when          who             what, where, why
 ** ----------    ------------    --------------------------------
+** 2024-11-24	 me				 Success snd
 ** 2024-11-24    me              Resume.
 ** 2024-11-24    me              Pseudo-resume.
 ** 2024-11-24    me              Next level screen.
@@ -71,10 +72,43 @@
 # define SETAEERECT(prc,l,t,w,h)   (prc)->x=(S16)(l),(prc)->y=(S16)(t),(prc)->dx=(S16)(w),(prc)->dy=(S16)(h)
 #define theRowIsDirty( row) ( me->gridRowMap[row] == me->gridRowMask)
 
-#ifdef _WIN32
-#define debug printf
+#ifndef __MTK_TARGET__
+#define debug(format, ...) printf((format), ##__VA_ARGS__)
 #else
-#define debug __noop
+#define debug(...) kal_prompt_trace(MOD_MMI, __VA_ARGS__)
+#endif
+
+#ifdef __MMI_GAME_MULTICHANNEL_SOUND__
+#define GFX_TETRIS_PLAY_AUDIO(raw_data, size, play_style)                  \
+do{                                                                        \
+   if(GFX.is_aud_on &&                                                     \
+      (srv_prof_is_profile_activated(SRV_PROF_SILENT_MODE) != SRV_PROF_RET_PROFILE_ACTIVATED) && !mmi_gfx_is_background_call())           \
+   {                                                                       \
+      mdi_audio_play_string_with_vol_path_non_block(  (void*)raw_data,     \
+                                                      (U32)size,           \
+                                                      MDI_FORMAT_SMF,      \
+                                                      play_style,          \
+                                                      NULL,                \
+                                                      NULL,                \
+                                                      GFX.aud_volume,      \
+                                                      MDI_DEVICE_SPEAKER2);\
+   }                                                                       \
+}while(0)
+#else
+#define GFX_TETRIS_PLAY_AUDIO(raw_data, size, play_style)                  \
+do{                                                                        \
+   if((srv_prof_is_profile_activated(SRV_PROF_SILENT_MODE) != SRV_PROF_RET_PROFILE_ACTIVATED) && !mmi_gfx_is_background_call())           \
+   {                                                                       \
+      mdi_audio_play_string_with_vol_path_non_block(  (void*)raw_data,     \
+                                                      (U32)size,           \
+                                                      MDI_FORMAT_SMF,      \
+                                                      play_style,          \
+                                                      NULL,                \
+                                                      NULL,                \
+                                                      GFX.aud_volume,      \
+                                                      MDI_DEVICE_SPEAKER2);\
+   }                                                                       \
+}while(0)
 #endif
 
 /*
@@ -1152,10 +1186,10 @@ static void displaySplashScreen(  void)
 		rect.dx  = iStrWdt;
         rect.x   = ( UI_device_width - rect.dx) >> 1;
         rect.y   = ( UI_device_width - iImgHgt - iStrHgt) >> 1;
-        draw3DText( rect.x, rect.y, pTitleString);
+        draw3DText( rect.x, rect.y, (UI_string_type)pTitleString);
 		gui_BLT_double_buffer(0, 0, UI_device_width - 1, UI_device_height - 1);
 		
-		GFX_PLAY_AUDIO_MIDI_TITLE(tetris_sfx_title, tetris_sfx_title_size, DEVICE_AUDIO_PLAY_ONCE);
+		playMusic(MUSIC_TITLE);
 	}
 }
 
@@ -1444,7 +1478,7 @@ static void clearTheNextFallingTetris( void)
 
 static boolean playMusic( MusicTypeEnum type)
 {
-	void* buffer;
+	U8* buffer;
 	U32 size;
 	debug("sound=====%d",me->soundOn);
     if( me->soundOn == FALSE)
@@ -1454,6 +1488,11 @@ static boolean playMusic( MusicTypeEnum type)
 
     switch(type)
     {
+        case MUSIC_TITLE:
+            buffer = tetris_sfx_title;
+			size = tetris_sfx_title_size;
+            break;
+
         case MUSIC_PLACE:
 			buffer = tetris_sfx_blink;
 			size = tetris_sfx_blink_size;
@@ -1475,8 +1514,8 @@ static boolean playMusic( MusicTypeEnum type)
             break;
 
         case MUSIC_NEXTLEVEL:
-            buffer = tetris_sfx_hero;
-			size = tetris_sfx_hero_size;
+            buffer = tetris_sfx_success;
+			size = tetris_sfx_success_size;
             break;
 
         case MUSIC_GAMEOVER:
@@ -1488,7 +1527,7 @@ static boolean playMusic( MusicTypeEnum type)
             return FALSE;
     }
 	debug("play sound");
-    GFX_PLAY_AUDIO_MIDI_TITLE(buffer, size, DEVICE_AUDIO_PLAY_ONCE);
+    GFX_TETRIS_PLAY_AUDIO(buffer, size, DEVICE_AUDIO_PLAY_ONCE);
     return TRUE;
 } // playMusic
 
