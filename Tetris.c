@@ -11,6 +11,7 @@
 **
 ** when          who             what, where, why
 ** ----------    ------------    --------------------------------
+** 2024-11-24    me              Resume.
 ** 2024-11-24    me              Pseudo-resume.
 ** 2024-11-24    me              Next level screen.
 ** 2024-11-23    me              Properly randomize pieces.
@@ -205,6 +206,8 @@ BOOL mmi_gx_tetris_showonce_timer_stop = FALSE; //improvisation for a show-once 
 gx_tetris_context_struct* me;
 WCHAR drawee_string[128];
 BOOL tetris_ingame = FALSE; //do not free if not in gameover state
+BOOL tetris_nextlevel = FALSE;
+U8 dummy_gamelevel_val = 0;
 /*
 **----------------------------------------------------------------------------
 **  Function(internal use only) Declarations
@@ -505,6 +508,7 @@ static void startOneNewGame(  void)
             me->xWhereToDrawTheNextFallingTetris,
             me->yWhereToDrawTheNextFallingTetris);
     launchOneTetris();
+	tetris_ingame = TRUE; //bypass value so as not to free data when next level screen shows up or resume game...
 } // startOneNewGame
 
 static void launchOneTetris( void)
@@ -1863,7 +1867,7 @@ static void gotoNextLevelYesButton(void)
                          GetString(GFX.game_data.game_str_id));
 
     GFX.game_data.enter_game_func_ptr();
-	tetris_ingame = FALSE; //back to the original value
+	tetris_nextlevel = FALSE; //back to the original value
 }
 
 static void gotoNextLevel( boolean isLastLevel)
@@ -1894,7 +1898,7 @@ static void gotoNextLevel( boolean isLastLevel)
     mmi_wsprintf_ex( displayString, sizeof( displayString), formatString, totalScore);
 	mmi_wcscpy(drawee_string, displayString);
 
-	tetris_ingame = TRUE; //bypass value so as not to free data when next level screen shows up
+	tetris_nextlevel = TRUE;
 
 	entry_full_screen();
 
@@ -1911,9 +1915,6 @@ static void gotoNextLevel( boolean isLastLevel)
     {
         GFX.is_first_time_enter_gameover = FALSE;
     }
-
-    /* suspend background play */
-    mdi_audio_suspend_background_play();
 
     if( isLastLevel)
     {
@@ -2001,11 +2002,12 @@ static void displayGameScoreScreen( uint16 resourceId, uint32 theScore, boolean 
     /*SetKeyHandler(mmi_frm_scrn_close_active_id, KEY_LEFT_ARROW, KEY_EVENT_DOWN);*/
 
     /* gameover will go back to first menuitem */
-    GFX.is_gameover = TRUE;
-    *(GFX.game_data.is_new_game) = TRUE;
+    g_gx_tetris_context.is_gameover = TRUE;
+    g_gx_tetris_context.is_new_game = TRUE;
 
     SetRightSoftkeyFunction(mmi_frm_scrn_close_active_id, KEY_EVENT_UP);
-
+	tetris_ingame = FALSE; //back to the original value
+	tetris_nextlevel = FALSE;
     setGameState(GAME_STATE_REPORT);
 } // displayGameScoreScreen
 
@@ -2068,13 +2070,14 @@ End:
 static void saveSettingData( void)
 {
 	S16 error;
-	
+	U8 level_store;
+
     g_gx_tetris_context.configData.gameLevel        = g_gx_tetris_context.gameLevel;
     g_gx_tetris_context.configData.drawGridLines    = g_gx_tetris_context.drawGridLines;
     g_gx_tetris_context.configData.soundOn          = g_gx_tetris_context.soundOn;
 	
-	g_gx_tetris_context.configData.gameLevel--;
-	WriteValue(NVRAM_GAME_TETRIS_LEVEL, &g_gx_tetris_context.configData.gameLevel, DS_BYTE, &error);
+	level_store = g_gx_tetris_context.configData.gameLevel-1;
+	WriteValue(NVRAM_GAME_TETRIS_LEVEL, &level_store, DS_BYTE, &error);
 	if (error != NVRAM_WRITE_SUCCESS)
 		return;
 	
@@ -2205,7 +2208,7 @@ void mmi_gx_tetris_enter_gfx(void)
 
     /* misc */
     GFX.game_data.grade_value_ptr = (S16*) (&g_gx_tetris_context.gameScore);        /* current level's grade (S16*) */
-    GFX.game_data.level_index_ptr = (U8*) (&g_gx_tetris_context.gameLevel); /* ptr to current level index (U8*) */
+    GFX.game_data.level_index_ptr = (U8*) (&dummy_gamelevel_val); /* ptr to current level index (U8*) */
     GFX.game_data.is_new_game = (BOOL*) (&g_gx_tetris_context.is_new_game);  /* ptr to new game flag (BOOL*) */
 
     /* function ptr */
@@ -2275,11 +2278,15 @@ void mmi_gx_tetris_enter_game(void)
     /* start game loop */
     if (g_gx_tetris_context.is_gameover == FALSE)
     {
-		if (tetris_ingame == FALSE)
+		if (g_gx_tetris_context.is_new_game == TRUE)
+		{
+			g_gx_tetris_context.is_new_game = FALSE;
 			startOneNewGame();
+		}
 		else
 		{
-			me->gameLevel += 1;
+			if (tetris_nextlevel == TRUE)
+				me->gameLevel += 1;
             setGameState(GAME_STATE_RUNNING);
             redrawTheScreen();
 		}
@@ -2350,7 +2357,7 @@ void mmi_gx_tetris_exit_game(void)
 
 void mmi_gx_tetris_init_game(void)
 {
-	if (tetris_ingame == FALSE) //for nextlevel screen so as not to reinit
+	if (tetris_ingame == FALSE)
 	{
 		if (initGameDataMemory() == TRUE)
 			debug( ";Tetris_InitAppData success");
