@@ -11,6 +11,8 @@
 **
 ** when          who             what, where, why
 ** ----------    ------------    --------------------------------
+** 2024-11-24    me              Pseudo-resume.
+** 2024-11-24    me              Next level screen.
 ** 2024-11-23    me              Properly randomize pieces.
 ** 2024-11-22    me              Created.
 **
@@ -53,6 +55,8 @@
 #endif
 
 #include "mmi_frm_nvram_gprot.h" 
+
+#ifdef __MMI_GAME_TETRIS__
 
 /*
 **----------------------------------------------------------------------------
@@ -198,9 +202,9 @@ gx_tetris_context_struct g_gx_tetris_context =
 };
 
 BOOL mmi_gx_tetris_showonce_timer_stop = FALSE; //improvisation for a show-once timer
-
 gx_tetris_context_struct* me;
-
+WCHAR drawee_string[128];
+BOOL tetris_ingame = FALSE; //do not free if not in gameover state
 /*
 **----------------------------------------------------------------------------
 **  Function(internal use only) Declarations
@@ -209,7 +213,7 @@ gx_tetris_context_struct* me;
 
 //==============================Init================================
 static boolean  initGameData( void);
-static void     freeGameData( void);
+static void     freeGameDataMemory( void);
 static void     initParametersAccordingToScreenSize( void);
 //============================Processor=============================
 
@@ -294,17 +298,17 @@ void mmi_gx_tetris_cyclic_timer(void);
 void mmi_gx_tetris_init_game(void);   /* draw gameover screen */
 
 //=============================Init================================
-static boolean initGameData(void)
+static boolean initGameDataMemory(void)
 {
     int i           = 0;
-	int j 			= 0;
 	
 	me = &g_gx_tetris_context;
-    me->screenWidth  = UI_device_width;
-    me->screenHeight =  UI_device_height;   // The width and height of the device.
+
+    g_gx_tetris_context.screenWidth  = UI_device_width;
+    g_gx_tetris_context.screenHeight =  UI_device_height;   // The width and height of the device.
     debug( ";initApp, screen, cx = %d, cy = %d", UI_device_width, UI_device_height);
 
-    me->fontHeight = gui_get_character_height();
+    g_gx_tetris_context.fontHeight = gui_get_character_height();
     debug( ";initApp, font height = %d", me->fontHeight);
 
     // calculate screen parameters according to the device infomation
@@ -344,6 +348,13 @@ static boolean initGameData(void)
             return FALSE;
         }
     }
+	return TRUE;
+}
+
+static boolean initGameData(void)
+{
+    int i           = 0;
+	int j 			= 0;
 
     // load configuration data
     getSettingData();
@@ -395,7 +406,7 @@ static boolean initGameData(void)
 	return TRUE;
 }
 
-static void freeGameData(  void)
+static void freeGameDataMemory(  void)
 {
     int i;
 
@@ -464,14 +475,16 @@ static void initParametersAccordingToScreenSize( void)
 
 static void killTimer()
 {
-	gui_cancel_timer(gameOver);
 	gui_cancel_timer(moveDownwardsIf);
+	gui_cancel_timer(drawGameScoreAndGameSpeed);
 	gui_cancel_timer(flashWhenDeleteDirtyRows);
 	gui_cancel_timer(clearPlayingZoneAfterGameOver);
+	gui_cancel_timer(gameOver);
 }
 
 static void setGameState(GameStateEnum gameState)
 {
+	debug("state=====%d", gameState);
     g_gx_tetris_context.previousGameState   = g_gx_tetris_context.gameState;
     g_gx_tetris_context.gameState           = gameState;
 }
@@ -1025,6 +1038,93 @@ static boolean pauseOrResumeGame( void)
 
 //---------------------------- UI related method definition
 
+void Tetris_2Key(void)
+{
+ 	if(me->gameState == GAME_STATE_RUNNING && me->theFallingTetris.model != 6 &&
+       !me->theFallingTetris.pinned && me->flashCounterWhenDeleteDirtyRows == 0)
+    {
+		rotateIf();
+    }
+}
+
+void Tetris_4Key(void)
+{
+ 	if(me->gameState == GAME_STATE_RUNNING&&
+       !me->theFallingTetris.pinned && me->flashCounterWhenDeleteDirtyRows == 0)
+    {
+		moveLeftwardsIf();
+    }
+}
+
+void Tetris_5Key(void)
+{
+	 pauseOrResumeGame();
+}
+
+void Tetris_6Key(void)
+{
+ 	if(me->gameState == GAME_STATE_RUNNING &&
+       !me->theFallingTetris.pinned && me->flashCounterWhenDeleteDirtyRows == 0)
+    {
+		moveRightwardsIf();
+    }
+}
+
+void Tetris_8Key(void)
+{
+ 	if(me->gameState == GAME_STATE_RUNNING &&
+       !me->theFallingTetris.pinned && me->flashCounterWhenDeleteDirtyRows == 0)
+    {
+		gui_cancel_timer(moveDownwardsIf);
+        me->moveDownwardAccelerated = TRUE;
+        moveDownwardsIf();
+    }
+}
+
+void Tetris_KeyboardKey(S32 vkey_code, S32 key_state)
+{
+    /*----------------------------------------------------------------*/
+    /* Local Variables                                                */
+    /*----------------------------------------------------------------*/
+
+    /*----------------------------------------------------------------*/
+    /* Code Body                                                      */
+    /*----------------------------------------------------------------*/
+#if(MMI_BUILD_TYPE == BUILD_TYPE_X86WIN32)
+    if (key_state)
+    {
+        switch (vkey_code)  /* key down */
+        {
+            case 32:
+                Tetris_5Key();  /* left */
+                break;
+            case 37:
+                Tetris_4Key();  /* left */
+                break;
+            case 38:
+                Tetris_2Key();    /* up */
+                break;
+            case 39:
+                Tetris_6Key(); /* right */
+                break;
+            case 40:
+                Tetris_8Key();  /* down */
+                break;
+			case
+                //     case 1:         tetris_handle_key_exit();
+                //                             break;
+        }
+    }
+    else    /* key up */
+    {
+    }
+#else /* (MMI_BUILD_TYPE == BUILD_TYPE_X86WIN32) */ 
+    UI_UNUSED_PARAMETER(vkey_code);
+    UI_UNUSED_PARAMETER(key_state);
+#endif /* (MMI_BUILD_TYPE == BUILD_TYPE_X86WIN32) */ 
+
+}
+
 static void displaySplashScreen(  void)
 {
 	PU8				pImage = NULL;
@@ -1089,9 +1189,9 @@ static void draw3DText( S16 x, S16 y, UI_string_type text)
 	color3.r = 0xff;
 	color3.g = 0xcc;
 	color3.b = 0x00;
-	drawText3( x, y - 1, text, color1, 0);
-	drawText3( x - 1, y + 1, text, color2, 0);
-    drawText3( x + 1, y + 1, text, color2, 0);
+	//drawText3( x, y - 1, text, color1, 0);
+	//drawText3( x - 1, y + 1, text, color2, 0);
+    //drawText3( x + 1, y + 1, text, color2, 0);
     drawText3( x, y, text, color3, 0);
 }
 
@@ -1451,7 +1551,7 @@ static boolean updateGameScoreAndGoToNextLevelIf( void)
         me->gameScore -= LEVEL_SCORE;
         me->sleepTime -= TIME_SLICE;
         drawGameScoreAndGameSpeed();
-
+		
         if(me->sleepTime <= FLASH_TIME)
         {
 
@@ -1598,8 +1698,7 @@ static void clearPlayingZoneAfterGameOver( void)
     }
     else
     {
-        //saveGameDataAndDisplayGameScore();
-		mmi_gx_tetris_gameover();
+        saveGameDataAndDisplayGameScore();
         return;
     }
 
@@ -1645,115 +1744,11 @@ static void resetControlsAndClearScreen( boolean clearScreen)
     }
 } // resetControlsAndClearScreen
 
-static void gotoNextLevel( boolean isLastLevel)
+static void drawStringBox()
 {
-
-    /*uint16  gameLevelStartFromZero;
-    uint16  levelInitSpeed;
-    uint16  titleId;
-    uint16  totalScore;
-    uint32  staticProperties;
-    AEERect rect;
-    AECHAR  formatString[128];
-    AECHAR  displayString[128];
-
-    ISHELL_CancelTimer( me->a.m_pIShell, NULL, me);
-    resetControlsAndClearScreen( FALSE);
-
-    gameLevelStartFromZero  = me->gameLevel - 1;
-    titleId                 = IDS_TETRIS_LEVEL_1 + gameLevelStartFromZero;
-
-    rect.dx = me->screenWidth * 5 / 6;
-    rect.dy = me->screenHeight * 5 / 6 - me->fontHeight - 13;
-    rect.x  = me->screenWidth / 12;
-    rect.y  = rect.x + me->fontHeight + 5;
-    drawPopWindowFrameBorder( titleId, &rect);
-
-    levelInitSpeed = (INIT_TIME - ( ( MAX_LEVEL - gameLevelStartFromZero) * INIT_TIME / MAX_LEVEL)) / TIME_SLICE;
-    totalScore = (me->gameSpeed - levelInitSpeed) * LEVEL_SCORE;
-    totalScore += isLastLevel ? me->gameScore : 0;
-    if( me->configData.topScore[gameLevelStartFromZero] < totalScore)
-    {
-        me->configData.topScore[gameLevelStartFromZero] = totalScore;
-        saveSettingData();
-    }
-    ISHELL_LoadResString( me->a.m_pIShell,
-                    TETRIS_RES_FILE_LANGUAGE,
-                    isLastLevel ? IDS_PASS_LAST : IDS_PASS,
-                    formatString,
-                    sizeof( formatString)
-                 );
-    WSPRINTF( displayString, sizeof( displayString), formatString, totalScore);
-
-    rect.dy -=  me->fontHeight + 4;
-    staticProperties = ST_CENTERTITLE | ST_UNDERLINE | ST_CENTERTEXT;
-    ISTATIC_SetRect( me->staticControl, &rect);
-    ISTATIC_SetProperties( me->staticControl, staticProperties);
-    ISTATIC_SetText( me->staticControl,
-                NULL,
-                displayString,
-                AEE_FONT_NORMAL,
-                AEE_FONT_NORMAL
-             );
-
-    ISTATIC_SetActive( me->staticControl, TRUE);
-    ISTATIC_Redraw( me->staticControl);
-
-    rect.y  = rect.y + rect.dy;
-    rect.dy = GetBottomBarHeight( me->a.m_pIDisplay);
-
-    if( isLastLevel)
-    {
-       IMENUCTL_AddItem( me->menuSoftkey,
-                         TETRIS_RES_FILE_LANGUAGE,
-                         IDS_TETRIS_OK,
-                         IDS_TETRIS_OK,
-                         NULL,
-                         NULL
-            );
-    }
-    else
-    {
-        IMENUCTL_AddItem( me->menuSoftkey,
-                          TETRIS_RES_FILE_LANGUAGE,
-                          IDS_YES,
-                          IDS_YES,
-                          NULL,
-                          NULL
-            );
-        IMENUCTL_AddItem( me->menuSoftkey,
-                          TETRIS_RES_FILE_LANGUAGE,
-                          IDS_NO,
-                          IDS_NO,
-                          NULL,
-                          NULL
-            );
-    }
-
-    IMENUCTL_SetRect( me->menuSoftkey, &rect);
-    IMENUCTL_SetActive( me->menuSoftkey, TRUE);*/
-    setGameState(isLastLevel ? GAME_STATE_LASTLEVEL : GAME_STATE_NEXTLEVEL);
-} // gotoNextLevel
-
-static void displayGameScoreScreen( uint16 resourceId, uint32 theScore, boolean recordBroken)
-{
-    WCHAR   scoreFormatString[128];
-    WCHAR   scoreString[128];
 	S32 maxht, fh; 
 
-    resetControlsAndClearScreen( FALSE);
-
-	mmi_wcscpy(scoreFormatString, (WCHAR *) GetString(resourceId));
-    if( recordBroken)
-    {
-		mmi_wsprintf_ex(scoreString, sizeof(scoreString), scoreFormatString, theScore);
-    }
-    else
-    {
-		mmi_wsprintf_ex(scoreString, sizeof(scoreString), scoreFormatString, theScore,
-						g_gx_tetris_context.configData.topScore[g_gx_tetris_context.gameLevel - 1]);
-    }
-	create_multiline_inputbox_set_buffer(scoreString, gui_strlen(scoreString), gui_strlen(scoreString), 0);
+	create_multiline_inputbox_set_buffer(drawee_string, gui_strlen(drawee_string), gui_strlen(drawee_string), 0);
 	MMI_multiline_inputbox.flags |= UI_MULTI_LINE_INPUT_BOX_DISABLE_CURSOR_DRAW
         | UI_MULTI_LINE_INPUT_BOX_CENTER_JUSTIFY
         | UI_MULTI_LINE_INPUT_BOX_DISABLE_SCROLLBAR | UI_MULTI_LINE_INPUT_BOX_VIEW_MODE;
@@ -1774,6 +1769,243 @@ static void displayGameScoreScreen( uint16 resourceId, uint32 theScore, boolean 
     }
 	resize_multiline_inputbox(UI_device_width, maxht);
 	show_multiline_inputbox();
+}
+
+void displayScreenStop(void)
+{
+    /*----------------------------------------------------------------*/
+    /* Local Variables                                                */
+    /*----------------------------------------------------------------*/
+
+    /*----------------------------------------------------------------*/
+    /* Code Body                                                      */
+    /*----------------------------------------------------------------*/
+    /* stop all playing audio and vibration */
+    VibratorOff();
+    mdi_audio_stop_string();
+
+    /* resume if there is background playing */
+    mdi_audio_resume_background_play();
+
+}
+
+extern void mmi_gfx_enter_game(void);
+extern void mmi_gfx_exit_game(void);
+
+static void gotoNextLevelYesButton(void)
+{
+	S16 error;
+	MMI_BOOL entry_ret = MMI_FALSE;
+	me->gameLevel += 1;
+	//copy of mmi_gfx_enter_game
+	mmi_frm_scrn_close_active_id();
+	entry_ret = mmi_frm_scrn_enter (GFX.cur_gid, GFX_GAME_SCREEN, mmi_gfx_exit_game, mmi_gfx_enter_game, MMI_FRM_FG_ONLY_SCRN);
+	if (!entry_ret)
+	{
+		kal_prompt_trace(MOD_MMI, "Misstion is imposible");
+		return;
+	}
+
+    /* reset clip */
+    gdi_layer_reset_clip();
+    gdi_layer_reset_text_clip();
+
+    /* entry full screen app */
+    entry_full_screen();
+
+    ClearInputEventHandler(MMI_DEVICE_ALL);
+    clear_category_screen_key_handlers();
+
+    SetKeyHandler(mmi_frm_scrn_close_active_id, KEY_RSK, KEY_EVENT_UP);
+    SetKeyHandler(mmi_gfx_volume_up, KEY_VOL_UP, KEY_EVENT_DOWN);
+    SetKeyHandler(mmi_gfx_volume_down, KEY_VOL_DOWN, KEY_EVENT_DOWN);
+
+    /* reset clip */
+    gui_reset_text_clip();
+    gui_reset_clip();
+
+    /* 
+     * This is used to solve a very rare situation. When playing a IMELODY 
+     * with backlight on/off, and the screen previous to this screen is a 
+     * horizontal screen. Before enter this screen, the IMELODY turn off the
+     * backlight. While exit previous screen, the layer rotate back to normal
+     * size and the content is not correct. So when calling TurnOnBacklight, 
+     * LCD is in sleepin state and draw wrong content to LCD.
+     * So we need to clear the buffer first to avoid this situation.
+     */
+    gdi_layer_clear(GDI_COLOR_BLACK);
+
+    /* stop MMI sleep */
+    //TurnOnBacklight(0);
+
+#ifdef __MMI_SUBLCD__
+    /* draw game icon on sublcd */
+    ForceSubLCDScreen(mmi_gfx_entry_sublcd_screen);
+#endif /* __MMI_SUBLCD__ */ 
+    /*
+     * fill background with white color - 
+     * for display smaller game on bigger LCM that will have clear background 
+     */
+    gui_fill_rectangle(0, 0, UI_device_width - 1, UI_device_height - 1, gui_color(255, 255, 255));
+
+    /* lock and blt, this may force full screen region will be blt when enter game */
+    gdi_layer_lock_frame_buffer();
+    gdi_layer_blt_previous(0, 0, UI_device_width - 1, UI_device_height - 1);
+    gdi_layer_unlock_frame_buffer();
+
+    /* disalbe align timer and enter game */
+    UI_disable_alignment_timers();
+#ifdef __MTK_TARGET__
+    mmi_frm_set_key_handle_in_high_frequency(MMI_TRUE);
+#endif 
+
+    MMI_PRINT(MOD_MMI_MEDIA_APP, MMI_MEDIA_TRC_G2_APP, "*---[Tetris.c] Enter game after level screen---*\n",
+                         GetString(GFX.game_data.game_str_id));
+
+    GFX.game_data.enter_game_func_ptr();
+	tetris_ingame = FALSE; //back to the original value
+}
+
+static void gotoNextLevel( boolean isLastLevel)
+{
+	uint16  gameLevelStartFromZero;
+    uint16  levelInitSpeed;
+    uint16  titleId;
+    uint16  totalScore;
+    uint32  staticProperties;
+    WCHAR  formatString[128];
+    WCHAR  displayString[128];
+	U8 *guiBuffer;  /* Buffer holding history data */
+	MMI_BOOL entry_ret;
+
+    killTimer();
+    resetControlsAndClearScreen( FALSE);
+
+	gameLevelStartFromZero  = me->gameLevel - 1;
+    levelInitSpeed = (INIT_TIME - ( ( MAX_LEVEL - gameLevelStartFromZero) * INIT_TIME / MAX_LEVEL)) / TIME_SLICE;
+    totalScore = (me->gameSpeed - levelInitSpeed) * LEVEL_SCORE;
+    totalScore += isLastLevel ?g_gx_tetris_context.gameScore : 0;
+    if(g_gx_tetris_context.configData.topScore[gameLevelStartFromZero] < totalScore)
+    {
+       g_gx_tetris_context.configData.topScore[gameLevelStartFromZero] = totalScore;
+        saveSettingData();
+    }
+    mmi_wcscpy(formatString, (WCHAR *) GetString(isLastLevel ? STR_GX_TETRIS_PASS_LAST : STR_GX_TETRIS_PASS));
+    mmi_wsprintf_ex( displayString, sizeof( displayString), formatString, totalScore);
+	mmi_wcscpy(drawee_string, displayString);
+
+	tetris_ingame = TRUE; //bypass value so as not to free data when next level screen shows up
+
+	entry_full_screen();
+
+	entry_ret = mmi_frm_scrn_enter (GFX.cur_gid, GFX_GAMEOVER_SCREEN, displayScreenStop, displayGameScoreScreen, MMI_FRM_UNKNOW_SCRN);
+	if (!entry_ret)
+	{
+		kal_prompt_trace(MOD_MMI, "Misstion is imposible");
+		return;
+	}
+    guiBuffer = mmi_frm_scrn_get_gui_buf(GFX.cur_gid, GFX_GAMEOVER_SCREEN);
+
+    /* not first time enter */
+    if (guiBuffer != NULL)
+    {
+        GFX.is_first_time_enter_gameover = FALSE;
+    }
+
+    /* suspend background play */
+    mdi_audio_suspend_background_play();
+
+    if( isLastLevel)
+    {
+		ShowCategory221Screen(
+			0,
+			0,                                      /* caption */
+			0,
+			0,                          /* LSK */
+			STR_GLOBAL_BACK,
+			IMG_GLOBAL_BACK,                                      /* RSK */
+			GDI_COLOR_WHITE,
+			drawStringBox);
+    }
+    else
+    {
+		ShowCategory221Screen(
+			0,
+			0,                                      /* caption */
+			STR_GLOBAL_YES,
+			IMG_GLOBAL_YES,                          /* LSK */
+			STR_GLOBAL_NO,
+			IMG_GLOBAL_NO,                                      /* RSK */
+			GDI_COLOR_WHITE,
+			drawStringBox);
+    }
+	SetLeftSoftkeyFunction(gotoNextLevelYesButton, KEY_EVENT_UP);
+	SetRightSoftkeyFunction(mmi_frm_scrn_close_active_id, KEY_EVENT_UP);
+    setGameState(isLastLevel ? GAME_STATE_LASTLEVEL : GAME_STATE_NEXTLEVEL);
+} // gotoNextLevel
+
+static void displayGameScoreScreen( uint16 resourceId, uint32 theScore, boolean recordBroken)
+{
+    WCHAR   scoreFormatString[128];
+    WCHAR   scoreString[128];
+    U8 *guiBuffer;  /* Buffer holding history data */
+	MMI_BOOL entry_ret;
+
+    resetControlsAndClearScreen( FALSE);
+
+	mmi_wcscpy(scoreFormatString, (WCHAR *) GetString(resourceId));
+    if( recordBroken)
+    {
+
+		mmi_wsprintf_ex(scoreString, sizeof(scoreString), scoreFormatString, theScore);
+    }
+    else
+    {
+		mmi_wsprintf_ex(scoreString, sizeof(scoreString), scoreFormatString, theScore,
+						g_gx_tetris_context.configData.topScore[g_gx_tetris_context.gameLevel - 1]);
+    }
+	mmi_wcscpy(drawee_string, scoreString);
+    entry_full_screen();
+	entry_ret = mmi_frm_scrn_enter (GFX.cur_gid, GFX_GAMEOVER_SCREEN, displayScreenStop, displayGameScoreScreen, MMI_FRM_UNKNOW_SCRN);
+	if (!entry_ret)
+	{
+		kal_prompt_trace(MOD_MMI, "Misstion is imposible");
+		return;
+	}
+    guiBuffer = mmi_frm_scrn_get_gui_buf(GFX.cur_gid, GFX_GAMEOVER_SCREEN);
+
+    /* not first time enter */
+    if (guiBuffer != NULL)
+    {
+        GFX.is_first_time_enter_gameover = FALSE;
+    }
+
+    /* suspend background play */
+    mdi_audio_suspend_background_play();
+	if (recordBroken)
+		GFX_PLAY_AUDIO_COMPLETE();
+	else
+		GFX_PLAY_AUDIO_GAMEOVER();
+
+    ShowCategory221Screen(
+        0,
+        0,                                      /* caption */
+        0,
+        0,                          /* LSK */
+        STR_GLOBAL_BACK,
+        IMG_GLOBAL_BACK,                                      /* RSK */
+        GDI_COLOR_WHITE,
+        drawStringBox);  /* redraw callback */
+
+    /* go back to game menu */
+    /*SetKeyHandler(mmi_frm_scrn_close_active_id, KEY_LEFT_ARROW, KEY_EVENT_DOWN);*/
+
+    /* gameover will go back to first menuitem */
+    GFX.is_gameover = TRUE;
+    *(GFX.game_data.is_new_game) = TRUE;
+
+    SetRightSoftkeyFunction(mmi_frm_scrn_close_active_id, KEY_EVENT_UP);
+
     setGameState(GAME_STATE_REPORT);
 } // displayGameScoreScreen
 
@@ -1836,8 +2068,7 @@ End:
 static void saveSettingData( void)
 {
 	S16 error;
-	S32 stored_level;
-
+	
     g_gx_tetris_context.configData.gameLevel        = g_gx_tetris_context.gameLevel;
     g_gx_tetris_context.configData.drawGridLines    = g_gx_tetris_context.drawGridLines;
     g_gx_tetris_context.configData.soundOn          = g_gx_tetris_context.soundOn;
@@ -1856,93 +2087,6 @@ static void saveSettingData( void)
 	WriteValue(NVRAM_GX_TETRIS_SCORE_HARD, &g_gx_tetris_context.configData.topScore[2], DS_SHORT, &error);
 	if (error != NVRAM_WRITE_SUCCESS)
 		return;
-}
-
-void Tetris_2Key(void)
-{
- 	if(me->gameState == GAME_STATE_RUNNING && me->theFallingTetris.model != 6 &&
-       !me->theFallingTetris.pinned && me->flashCounterWhenDeleteDirtyRows == 0)
-    {
-		rotateIf();
-    }
-}
-
-void Tetris_4Key(void)
-{
- 	if(me->gameState == GAME_STATE_RUNNING&&
-       !me->theFallingTetris.pinned && me->flashCounterWhenDeleteDirtyRows == 0)
-    {
-		moveLeftwardsIf();
-    }
-}
-
-void Tetris_5Key(void)
-{
-	 pauseOrResumeGame();
-}
-
-void Tetris_6Key(void)
-{
- 	if(me->gameState == GAME_STATE_RUNNING &&
-       !me->theFallingTetris.pinned && me->flashCounterWhenDeleteDirtyRows == 0)
-    {
-		moveRightwardsIf();
-    }
-}
-
-void Tetris_8Key(void)
-{
- 	if(me->gameState == GAME_STATE_RUNNING &&
-       !me->theFallingTetris.pinned && me->flashCounterWhenDeleteDirtyRows == 0)
-    {
-		gui_cancel_timer(moveDownwardsIf);
-        me->moveDownwardAccelerated = TRUE;
-        moveDownwardsIf();
-    }
-}
-
-void Tetris_KeyboardKey(S32 vkey_code, S32 key_state)
-{
-    /*----------------------------------------------------------------*/
-    /* Local Variables                                                */
-    /*----------------------------------------------------------------*/
-
-    /*----------------------------------------------------------------*/
-    /* Code Body                                                      */
-    /*----------------------------------------------------------------*/
-#if(MMI_BUILD_TYPE == BUILD_TYPE_X86WIN32)
-    if (key_state)
-    {
-        switch (vkey_code)  /* key down */
-        {
-            case 32:
-                Tetris_5Key();  /* left */
-                break;
-            case 37:
-                Tetris_4Key();  /* left */
-                break;
-            case 38:
-                Tetris_2Key();    /* up */
-                break;
-            case 39:
-                Tetris_6Key(); /* right */
-                break;
-            case 40:
-                Tetris_8Key();  /* down */
-                break;
-			case
-                //     case 1:         tetris_handle_key_exit();
-                //                             break;
-        }
-    }
-    else    /* key up */
-    {
-    }
-#else /* (MMI_BUILD_TYPE == BUILD_TYPE_X86WIN32) */ 
-    UI_UNUSED_PARAMETER(vkey_code);
-    UI_UNUSED_PARAMETER(key_state);
-#endif /* (MMI_BUILD_TYPE == BUILD_TYPE_X86WIN32) */ 
-
 }
 
 void mmi_gx_tetris_draw_gamescore(WCHAR* str)
@@ -2002,7 +2146,6 @@ void mmi_gx_tetris_draw_gamescore(WCHAR* str)
 
 }
 
-//#ifdef __MMI_GAME_TETRIS__
 /*
 ** ===========================================================================
 **
@@ -2066,93 +2209,15 @@ void mmi_gx_tetris_enter_gfx(void)
     GFX.game_data.is_new_game = (BOOL*) (&g_gx_tetris_context.is_new_game);  /* ptr to new game flag (BOOL*) */
 
     /* function ptr */
-    GFX.game_data.best_grade_func_ptr = mmi_gx_tetris_calc_best_grade;        /* function to calculate best grade */
     GFX.game_data.enter_game_func_ptr = mmi_gx_tetris_enter_game;     /* function to enter new game */
     GFX.game_data.exit_game_func_ptr = mmi_gx_tetris_exit_game;       /* function to exit game */
-    GFX.game_data.draw_gameover_func_ptr = saveGameDataAndDisplayGameScore;       /* function to draw gameover screen */
-
+    
     /* some flags */
     GFX.game_data.is_keypad_audio_enable = FALSE;   /* play keypad tone or not */
 	mmi_gx_tetris_showonce_timer_stop = TRUE;
 
 	displaySplashScreen();
     gui_start_timer(INIT_TIME, mmi_gfx_entry_menu_screen_tetris);
-}
-
-/*
-** ===========================================================================
-**
-** Function:        
-**     mmi_gx_tetris_calc_best_grade
-**
-** Description: 
-**     Determine best score
-** 
-** Input: 
-**     old_grade, new_grade
-** 
-** Output: 
-**     Best score
-** 
-** Return value: 
-**     0
-** 
-** Side effects:
-**     Score changed
-**
-** ===========================================================================
-*/
-
-S16 mmi_gx_tetris_calc_best_grade(S16 old_grade, S16 new_grade)
-{
-    /*----------------------------------------------------------------*/
-    /* Local Variables                                                */
-    /*----------------------------------------------------------------*/
-
-    /*----------------------------------------------------------------*/
-    /* Code Body                                                      */
-    /*----------------------------------------------------------------*/
-    /* compare the best grade and return it */
-    return 0;
-}
-
-/*
-** ===========================================================================
-**
-** Function:        
-**     mmi_gx_tetris_draw_gameover
-**
-** Description: 
-**     Draw game over screen
-** 
-** Input: 
-**     none
-** 
-** Output: 
-**     none
-** 
-** Return value: 
-**     none
-** 
-** Side effects:
-**     none
-**
-** ===========================================================================
-*/
-
-void mmi_gx_tetris_draw_gameover(void)
-{
-    /*----------------------------------------------------------------*/
-    /* Local Variables                                                */
-    /*----------------------------------------------------------------*/
-
-    /*----------------------------------------------------------------*/
-    /* Code Body                                                      */
-    /*----------------------------------------------------------------*/
-	GFX_PLAY_AUDIO_GAMEOVER();
-
-    /* call this function to draw standard gameover screen */
-    //mmi_gx_tetris_draw_gameover_score();
 }
 
 /*
@@ -2210,10 +2275,14 @@ void mmi_gx_tetris_enter_game(void)
     /* start game loop */
     if (g_gx_tetris_context.is_gameover == FALSE)
     {
-		if (g_gx_tetris_context.is_new_game == TRUE)
+		if (tetris_ingame == FALSE)
 			startOneNewGame();
 		else
-			redrawTheScreen();
+		{
+			me->gameLevel += 1;
+            setGameState(GAME_STATE_RUNNING);
+            redrawTheScreen();
+		}
     }
 }
 
@@ -2250,8 +2319,9 @@ void mmi_gx_tetris_exit_game(void)
     /*----------------------------------------------------------------*/
     /* Code Body                                                      */
     /*----------------------------------------------------------------*/
-    killTimer();
-	freeGameData();
+	if (tetris_ingame == FALSE)
+		freeGameDataMemory();
+	killTimer();
 }
 
 /*
@@ -2280,166 +2350,13 @@ void mmi_gx_tetris_exit_game(void)
 
 void mmi_gx_tetris_init_game(void)
 {
-	if( initGameData() == TRUE)
-		debug( ";Tetris_InitAppData success");
-    else
-        freeGameData();
+	if (tetris_ingame == FALSE) //for nextlevel screen so as not to reinit
+	{
+		if (initGameDataMemory() == TRUE)
+			debug( ";Tetris_InitAppData success");
+		else
+			freeGameDataMemory();
+	}
 }
 
-/*
-** ===========================================================================
-**
-** Function:        
-**     mmi_gx_tetris_framemove
-**
-** Description: 
-**     Frame move
-** 
-** Input: 
-**     none
-** 
-** Output: 
-**     none
-** 
-** Return value: 
-**     none
-** 
-** Side effects:
-**     none
-**
-** ===========================================================================
-*/
-
-void mmi_gx_tetris_framemove(void)
-{
-    /*----------------------------------------------------------------*/
-    /* Local Variables                                                */
-    /*----------------------------------------------------------------*/
-
-    /*----------------------------------------------------------------*/
-    /* Code Body                                                      */
-    /*----------------------------------------------------------------*/
-    /* add logic code here */
-}
-
-
-/*
-** ===========================================================================
-**
-** Function:        
-**     mmi_gx_tetris_render
-**
-** Description: 
-**     Render function
-** 
-** Input: 
-**     none
-** 
-** Output: 
-**     none
-** 
-** Return value: 
-**     none
-** 
-** Side effects:
-**     none
-**
-** ===========================================================================
-*/
-
-void mmi_gx_tetris_render(void)
-{
-    /*----------------------------------------------------------------*/
-    /* Local Variables                                                */
-    /*----------------------------------------------------------------*/
-
-    /*----------------------------------------------------------------*/
-    /* Code Body                                                      */
-    /*----------------------------------------------------------------*/
-    /* add drawing code here */
-
-    gui_BLT_double_buffer(0, 0, UI_device_width - 1, UI_device_height - 1);
-}
-
-/*
-** ===========================================================================
-**
-** Function:        
-**     mmi_gx_tetris_gameover
-**
-** Description: 
-**     Game over function
-** 
-** Input: 
-**     none
-** 
-** Output: 
-**     none
-** 
-** Return value: 
-**     none
-** 
-** Side effects:
-**     none
-**
-** ===========================================================================
-*/
-
-void mmi_gx_tetris_gameover(void)
-{
-    /*----------------------------------------------------------------*/
-    /* Local Variables                                                */
-    /*----------------------------------------------------------------*/
-
-    /*----------------------------------------------------------------*/
-    /* Code Body                                                      */
-    /*----------------------------------------------------------------*/
-    g_gx_tetris_context.is_gameover = TRUE;
-    g_gx_tetris_context.is_new_game = TRUE;
-
-    /* call this function to draw gameover screen */
-    mmi_gfx_entry_gameover_screen();
-}
-
-/*
-** ===========================================================================
-**
-** Function:        
-**     mmi_gx_tetris_cyclic_timer
-**
-** Description: 
-**     Time trigger
-** 
-** Input: 
-**     none
-** 
-** Output: 
-**     none
-** 
-** Return value: 
-**     none
-** 
-** Side effects:
-**     none
-**
-** ===========================================================================
-*/
-
-void mmi_gx_tetris_cyclic_timer(void)
-{
-    /*----------------------------------------------------------------*/
-    /* Local Variables                                                */
-    /*----------------------------------------------------------------*/
-
-    /*----------------------------------------------------------------*/
-    /* Code Body                                                      */
-    /*----------------------------------------------------------------*/
-    //gui_start_timer(g_gx_tetris_context.timer_elapse, mmi_gx_tetris_cyclic_timer);
-
-    if (g_gx_tetris_context.is_gameover == FALSE)
-    {
-        startOneNewGame();
-    }
-}
-
-//#endif /* __MMI_GAME_TETRIS__ */ 
+#endif /* __MMI_GAME_TETRIS__ */ 
